@@ -2,32 +2,49 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="apple-touch-icon" href="https://via.placeholder.com/192">
-    
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hubstock v3</title>
+    <title>Hubstock v5</title>
     <style>
         :root { --p: #0f172a; --s: #3b82f6; --bg: #f1f5f9; }
-        body { font-family: system-ui, -apple-system; background: var(--bg); margin: 0; padding: 10px; color: var(--p); }
-        .header { position: sticky; top: 0; background: var(--bg); padding-bottom: 10px; z-index: 10; }
+        body { font-family: system-ui, -apple-system; background: var(--bg); margin: 0; padding: 10px; color: var(--p); padding-bottom: 80px; }
+        .header { position: sticky; top: 0; background: var(--bg); padding-bottom: 10px; z-index: 10; border-bottom: 1px solid #ddd; }
         .date-picker { width: 100%; padding: 12px; border-radius: 8px; border: 2px solid var(--s); font-size: 16px; margin-bottom: 10px; box-sizing: border-box; }
-        .card { background: white; border-radius: 8px; padding: 10px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card { background: white; border-radius: 8px; padding: 10px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: relative; }
         .cat-title { font-size: 0.8rem; text-transform: uppercase; color: #64748b; margin-bottom: 5px; font-weight: 800; border-left: 3px solid var(--s); padding-left: 8px; margin-top: 15px; }
-        .prod-name { font-weight: bold; font-size: 0.95rem; margin-bottom: 8px; }
+        .prod-name { font-weight: bold; font-size: 0.95rem; margin-bottom: 8px; display: flex; justify-content: space-between; }
         .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
         .cell { display: flex; flex-direction: column; }
         label { font-size: 9px; text-transform: uppercase; color: #94a3b8; margin-bottom: 2px; }
         input { width: 100%; padding: 6px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 13px; box-sizing: border-box; }
-        input[readonly] { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
-        .btns { position: sticky; bottom: 10px; display: flex; gap: 8px; margin-top: 15px; background: rgba(241, 245, 249, 0.9); padding: 10px; }
-        button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; color: white; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        input[readonly] { background: #f1f5f9; color: #1e293b; border: 1px dashed #cbd5e1; font-weight: bold; }
+        
+        /* Stock Level Colors */
+        .stock-red { background-color: #fee2e2 !important; color: #991b1b !important; }
+        .stock-yellow { background-color: #fef9c3 !important; color: #854d0e !important; }
+        .stock-green { background-color: #dcfce7 !important; color: #166534 !important; }
+        .restock-alert { font-size: 10px; color: #854d0e; font-weight: bold; text-transform: uppercase; }
+
+        #summaryOverlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:100; overflow-y:auto; }
+        .sum-card { background:white; margin:20px; padding:20px; border-radius:12px; }
+        .sum-line { display:flex; justify-content:space-between; border-bottom:1px solid #eee; padding:8px 0; font-size:14px; }
+        .total-line { border-top:2px solid var(--p); margin-top:10px; font-weight:bold; font-size:1.1rem; padding-top:10px; }
+
+        .btns { position: fixed; bottom: 0; left: 0; width: 100%; display: flex; gap: 8px; padding: 15px; background: white; box-sizing: border-box; border-top: 1px solid #ddd; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
+        button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; color: white; cursor: pointer; }
         .save-btn { background: var(--s); }
         .sum-btn { background: var(--p); }
+        .close-btn { background: #ef4444; width: 100%; margin-top: 15px; }
     </style>
 </head>
 <body>
+
+<div id="summaryOverlay">
+    <div class="sum-card">
+        <h2 id="sumTitle">Monthly Sales</h2>
+        <div id="sumBody"></div>
+        <button class="close-btn" onclick="document.getElementById('summaryOverlay').style.display='none'">Close Summary</button>
+    </div>
+</div>
 
 <div class="header">
     <h2 style="margin: 10px 0;">Hubstock Inventory</h2>
@@ -37,8 +54,8 @@
 <div id="app"></div>
 
 <div class="btns">
-    <button class="save-btn" onclick="saveDay()">Save Today's Data</button>
-    <button class="sum-btn" onclick="showMonthly()">Month Summary</button>
+    <button class="save-btn" onclick="saveDay()">Save Data</button>
+    <button class="sum-btn" onclick="showMonthly()">Summary</button>
 </div>
 
 <script>
@@ -51,21 +68,32 @@
         "Mash": ["Chick", "Grower", "Layer"]
     };
 
-    // Set default date to today
     document.getElementById('targetDate').valueAsDate = new Date();
+
+    function updateColor(id, value) {
+        const input = document.getElementById(`close-${id}`);
+        const alertBox = document.getElementById(`alert-${id}`);
+        input.classList.remove('stock-red', 'stock-yellow', 'stock-green');
+        alertBox.innerHTML = '';
+
+        if (value < 10) {
+            input.classList.add('stock-red');
+        } else if (value >= 10 && value <= 20) {
+            input.classList.add('stock-yellow');
+            alertBox.innerHTML = '<span class="restock-alert">⚠️ Needs Restock</span>';
+        } else if (value > 20) {
+            input.classList.add('stock-green');
+        }
+    }
 
     function loadDay() {
         const dateStr = document.getElementById('targetDate').value;
-        const selectedDate = new Date(dateStr);
-        const isFirstDay = selectedDate.getDate() === 1;
-        
+        const isFirstDay = new Date(dateStr).getDate() === 1;
         const container = document.getElementById('app');
         container.innerHTML = '';
 
         const currentData = JSON.parse(localStorage.getItem(dateStr)) || {};
-        
-        // Find previous day
-        const prevDate = new Date(selectedDate);
+        const prevDate = new Date(dateStr);
         prevDate.setDate(prevDate.getDate() - 1);
         const prevStr = prevDate.toISOString().split('T')[0];
         const prevData = JSON.parse(localStorage.getItem(prevStr)) || {};
@@ -78,42 +106,35 @@
                 
                 let openingValue = 0;
                 if (isFirstDay) {
-                    // If it's the 1st, use what's saved for today or 0
                     openingValue = d.open || 0;
-                } else {
-                    // Pull from yesterday's closing
-                    if(prevData[id]) {
-                        openingValue = (Number(prevData[id].open || 0) + Number(prevData[id].rec || 0)) - Number(prevData[id].sale || 0);
-                    }
+                } else if(prevData[id]) {
+                    openingValue = (Number(prevData[id].open || 0) + Number(prevData[id].rec || 0)) - Number(prevData[id].sale || 0);
                 }
                 
                 const closing = (Number(openingValue) + Number(d.rec)) - Number(d.sale);
 
                 section += `
                     <div class="card">
-                        <div class="prod-name">${item}</div>
+                        <div class="prod-name">
+                            <span>${cat} ${item}</span>
+                            <span id="alert-${id}"></span>
+                        </div>
                         <div class="grid">
-                            <div class="cell">
-                                <label>Open</label>
-                                <input type="number" id="open-${id}" value="${openingValue}" 
-                                    ${isFirstDay ? '' : 'readonly'} oninput="calc('${id}')">
-                            </div>
-                            <div class="cell">
-                                <label>Recv</label>
-                                <input type="number" id="rec-${id}" value="${d.rec}" oninput="calc('${id}')">
-                            </div>
-                            <div class="cell">
-                                <label>Sale</label>
-                                <input type="number" id="sale-${id}" value="${d.sale}" oninput="calc('${id}')">
-                            </div>
-                            <div class="cell">
-                                <label>Close</label>
-                                <input type="number" id="close-${id}" value="${closing}" readonly>
-                            </div>
+                            <div class="cell"><label>Open</label><input type="number" id="open-${id}" value="${openingValue}" ${isFirstDay ? '' : 'readonly'} oninput="calc('${id}')"></div>
+                            <div class="cell"><label>Recv</label><input type="number" id="rec-${id}" value="${d.rec}" oninput="calc('${id}')"></div>
+                            <div class="cell"><label>Sale</label><input type="number" id="sale-${id}" value="${d.sale}" oninput="calc('${id}')"></div>
+                            <div class="cell"><label>Close</label><input type="number" id="close-${id}" value="${closing}" readonly></div>
                         </div>
                     </div>`;
             });
             container.innerHTML += section;
+            items.forEach(item => {
+                const id = `${cat}-${item}`.replace(/\s+/g, '');
+                const d = currentData[id] || { open: 0, rec: 0, sale: 0 };
+                // Calculate and trigger initial color load
+                const op = isFirstDay ? (d.open || 0) : (prevData[id] ? (Number(prevData[id].open || 0) + Number(prevData[id].rec || 0)) - Number(prevData[id].sale || 0) : 0);
+                updateColor(id, (Number(op) + Number(d.rec)) - Number(d.sale));
+            });
         }
     }
 
@@ -121,7 +142,9 @@
         const op = Number(document.getElementById(`open-${id}`).value);
         const re = Number(document.getElementById(`rec-${id}`).value);
         const sa = Number(document.getElementById(`sale-${id}`).value);
-        document.getElementById(`close-${id}`).value = (op + re) - sa;
+        const closing = (op + re) - sa;
+        document.getElementById(`close-${id}`).value = closing;
+        updateColor(id, closing);
     }
 
     function saveDay() {
@@ -138,20 +161,35 @@
             });
         }
         localStorage.setItem(date, JSON.stringify(dayData));
-        alert("Inventory saved!");
+        alert("Saved!");
     }
 
     function showMonthly() {
         const month = document.getElementById('targetDate').value.substring(0, 7);
-        let totalSales = 0;
+        const summaryMap = {};
+        let grandTotal = 0;
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key.startsWith(month)) {
-                const data = JSON.parse(localStorage.getItem(key));
-                for (let id in data) { totalSales += Number(data[id].sale); }
+                const dayData = JSON.parse(localStorage.getItem(key));
+                for (let id in dayData) {
+                    const salesVal = Number(dayData[id].sale || 0);
+                    if (salesVal > 0) {
+                        summaryMap[id] = (summaryMap[id] || 0) + salesVal;
+                        grandTotal += salesVal;
+                    }
+                }
             }
         }
-        alert(`Monthly Summary (${month})\nTotal Items Sold: ${totalSales}`);
+        let html = '';
+        for (let prodId in summaryMap) {
+            const displayId = prodId.replace(/([A-Z])/g, ' $1').trim();
+            html += `<div class="sum-line"><span>${displayId}</span><span>${summaryMap[prodId]} units</span></div>`;
+        }
+        if(html === '') html = '<p>No sales recorded for this month.</p>';
+        document.getElementById('sumTitle').innerText = "Sales Summary: " + month;
+        document.getElementById('sumBody').innerHTML = html + `<div class="sum-line total-line"><span>TOTAL SOLD</span><span>${grandTotal} units</span></div>`;
+        document.getElementById('summaryOverlay').style.display = 'block';
     }
 
     loadDay();
