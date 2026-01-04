@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hubstock v3</title>
+    <style>
+        :root { --p: #0f172a; --s: #3b82f6; --bg: #f1f5f9; }
+        body { font-family: system-ui, -apple-system; background: var(--bg); margin: 0; padding: 10px; color: var(--p); }
+        .header { position: sticky; top: 0; background: var(--bg); padding-bottom: 10px; z-index: 10; }
+        .date-picker { width: 100%; padding: 12px; border-radius: 8px; border: 2px solid var(--s); font-size: 16px; margin-bottom: 10px; box-sizing: border-box; }
+        .card { background: white; border-radius: 8px; padding: 10px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .cat-title { font-size: 0.8rem; text-transform: uppercase; color: #64748b; margin-bottom: 5px; font-weight: 800; border-left: 3px solid var(--s); padding-left: 8px; margin-top: 15px; }
+        .prod-name { font-weight: bold; font-size: 0.95rem; margin-bottom: 8px; }
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+        .cell { display: flex; flex-direction: column; }
+        label { font-size: 9px; text-transform: uppercase; color: #94a3b8; margin-bottom: 2px; }
+        input { width: 100%; padding: 6px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 13px; box-sizing: border-box; }
+        input[readonly] { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
+        .btns { position: sticky; bottom: 10px; display: flex; gap: 8px; margin-top: 15px; background: rgba(241, 245, 249, 0.9); padding: 10px; }
+        button { flex: 1; padding: 15px; border-radius: 8px; border: none; font-weight: bold; color: white; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .save-btn { background: var(--s); }
+        .sum-btn { background: var(--p); }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2 style="margin: 10px 0;">Hubstock Inventory</h2>
+    <input type="date" id="targetDate" class="date-picker" onchange="loadDay()">
+</div>
+
+<div id="app"></div>
+
+<div class="btns">
+    <button class="save-btn" onclick="saveDay()">Save Today's Data</button>
+    <button class="sum-btn" onclick="showMonthly()">Month Summary</button>
+</div>
+
+<script>
+    const schema = {
+        "Superior": ["2mm", "3mm", "4mm", "6mm", "8mm"],
+        "Essential": ["3mm", "4mm", "6mm", "8mm"],
+        "Broiler Pro": ["Prestarter", "Starter", "Grower", "Finisher"],
+        "Broiler Ess": ["Starter", "Finisher"],
+        "Concentrate": ["Layer Production", "Rearer", "Broiler Starter", "Broiler Finisher", "Breeder"],
+        "Mash": ["Chick", "Grower", "Layer"]
+    };
+
+    // Set default date to today
+    document.getElementById('targetDate').valueAsDate = new Date();
+
+    function loadDay() {
+        const dateStr = document.getElementById('targetDate').value;
+        const selectedDate = new Date(dateStr);
+        const isFirstDay = selectedDate.getDate() === 1;
+        
+        const container = document.getElementById('app');
+        container.innerHTML = '';
+
+        const currentData = JSON.parse(localStorage.getItem(dateStr)) || {};
+        
+        // Find previous day
+        const prevDate = new Date(selectedDate);
+        prevDate.setDate(prevDate.getDate() - 1);
+        const prevStr = prevDate.toISOString().split('T')[0];
+        const prevData = JSON.parse(localStorage.getItem(prevStr)) || {};
+
+        for (const [cat, items] of Object.entries(schema)) {
+            let section = `<div class="cat-title">${cat}</div>`;
+            items.forEach(item => {
+                const id = `${cat}-${item}`.replace(/\s+/g, '');
+                const d = currentData[id] || { open: 0, rec: 0, sale: 0 };
+                
+                let openingValue = 0;
+                if (isFirstDay) {
+                    // If it's the 1st, use what's saved for today or 0
+                    openingValue = d.open || 0;
+                } else {
+                    // Pull from yesterday's closing
+                    if(prevData[id]) {
+                        openingValue = (Number(prevData[id].open || 0) + Number(prevData[id].rec || 0)) - Number(prevData[id].sale || 0);
+                    }
+                }
+                
+                const closing = (Number(openingValue) + Number(d.rec)) - Number(d.sale);
+
+                section += `
+                    <div class="card">
+                        <div class="prod-name">${item}</div>
+                        <div class="grid">
+                            <div class="cell">
+                                <label>Open</label>
+                                <input type="number" id="open-${id}" value="${openingValue}" 
+                                    ${isFirstDay ? '' : 'readonly'} oninput="calc('${id}')">
+                            </div>
+                            <div class="cell">
+                                <label>Recv</label>
+                                <input type="number" id="rec-${id}" value="${d.rec}" oninput="calc('${id}')">
+                            </div>
+                            <div class="cell">
+                                <label>Sale</label>
+                                <input type="number" id="sale-${id}" value="${d.sale}" oninput="calc('${id}')">
+                            </div>
+                            <div class="cell">
+                                <label>Close</label>
+                                <input type="number" id="close-${id}" value="${closing}" readonly>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+            container.innerHTML += section;
+        }
+    }
+
+    function calc(id) {
+        const op = Number(document.getElementById(`open-${id}`).value);
+        const re = Number(document.getElementById(`rec-${id}`).value);
+        const sa = Number(document.getElementById(`sale-${id}`).value);
+        document.getElementById(`close-${id}`).value = (op + re) - sa;
+    }
+
+    function saveDay() {
+        const date = document.getElementById('targetDate').value;
+        const dayData = {};
+        for (const [cat, items] of Object.entries(schema)) {
+            items.forEach(item => {
+                const id = `${cat}-${item}`.replace(/\s+/g, '');
+                dayData[id] = {
+                    open: document.getElementById(`open-${id}`).value,
+                    rec: document.getElementById(`rec-${id}`).value,
+                    sale: document.getElementById(`sale-${id}`).value
+                };
+            });
+        }
+        localStorage.setItem(date, JSON.stringify(dayData));
+        alert("Inventory saved!");
+    }
+
+    function showMonthly() {
+        const month = document.getElementById('targetDate').value.substring(0, 7);
+        let totalSales = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.startsWith(month)) {
+                const data = JSON.parse(localStorage.getItem(key));
+                for (let id in data) { totalSales += Number(data[id].sale); }
+            }
+        }
+        alert(`Monthly Summary (${month})\nTotal Items Sold: ${totalSales}`);
+    }
+
+    loadDay();
+</script>
+
+</body>
+</html>
