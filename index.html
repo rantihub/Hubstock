@@ -3,10 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hubstock v7 - Restock Alerts</title>
+    <title>Hubstock v7 - Pro Reporting</title>
     <style>
-        :root { --p: #0f172a; --s: #3b82f6; --bg: #f1f5f9; --success: #22c55e; --wa: #25d366; --danger: #ef4444; }
-        body { font-family: system-ui, -apple-system; background: var(--bg); margin: 0; padding: 10px; color: var(--p); padding-bottom: 180px; }
+        :root { --p: #0f172a; --s: #3b82f6; --bg: #f1f5f9; --success: #22c55e; --wa: #25d366; --danger: #ef4444; --reorder: #f59e0b; }
+        body { font-family: system-ui, -apple-system; background: var(--bg); margin: 0; padding: 10px; color: var(--p); padding-bottom: 240px; }
+        
+        /* Print Styles */
+        @media print {
+            .btns, .header, .footer-stats, .price-tag, label, .grid div:not(:last-child), .restock-sign { display: none !important; }
+            body { background: white; padding: 0; }
+            .card { border: 1px solid #eee !important; box-shadow: none !important; margin-bottom: 5px; page-break-inside: avoid; }
+            .cat-title { border-bottom: 2px solid #000; margin-top: 20px; }
+            .grid { grid-template-columns: 1fr !important; }
+            input { border: none !important; font-weight: bold !important; }
+        }
+
         .header { position: sticky; top: 0; background: var(--bg); padding-bottom: 10px; z-index: 10; border-bottom: 1px solid #ddd; }
         .date-picker { width: 100%; padding: 12px; border-radius: 8px; border: 2px solid var(--s); font-size: 16px; margin-bottom: 10px; box-sizing: border-box; }
         .card { background: white; border-radius: 8px; padding: 10px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid transparent; }
@@ -15,7 +26,6 @@
         .prod-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
         .prod-name { font-weight: bold; font-size: 0.9rem; display: flex; align-items: center; gap: 5px; }
         
-        /* Restock Sign */
         .restock-sign { font-size: 10px; background: var(--danger); color: white; padding: 2px 6px; border-radius: 4px; font-weight: 900; animation: blink 1.5s infinite; }
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
@@ -26,10 +36,10 @@
         input { width: 100%; padding: 6px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 13px; box-sizing: border-box; }
         input[readonly] { background: #f8fafc; color: #1e293b; font-weight: bold; }
         
-        .stock-red { background-color: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #ef4444 !important; }
+        .stock-red { background-color: #fee2e2 !important; color: #b91c1c !important; }
         .stock-green { background-color: #dcfce7 !important; color: #15803d !important; }
 
-        .footer-stats { position: fixed; bottom: 105px; left: 0; width: 100%; background: #1e293b; color: white; padding: 10px; font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 5px; z-index: 5; }
+        .footer-stats { position: fixed; bottom: 185px; left: 0; width: 100%; background: #1e293b; color: white; padding: 10px; font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 5px; z-index: 5; }
         .stat-row { display: flex; justify-content: space-around; width: 100%; }
         .alert-pill { background: var(--danger); padding: 2px 8px; border-radius: 10px; font-weight: bold; }
 
@@ -38,11 +48,14 @@
         .save-btn { background: var(--s); }
         .da-btn { background: var(--success); }
         .sum-btn { background: var(--p); }
-        .wa-btn { background: var(--wa); }
+        .stock-btn { background: #6366f1; }
+        .print-btn { background: #64748b; } /* Slate for printing */
+        .reorder-btn { background: var(--reorder); grid-column: span 2; margin-top: 5px; }
 
         #summaryOverlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:100; padding:15px; box-sizing:border-box; overflow-y:auto; }
         .sum-card { background:white; padding:20px; border-radius:12px; color: #000; }
-        .sum-line { display:flex; justify-content:space-between; border-bottom:1px solid #eee; padding:8px 0; font-size:12px; }
+        .sum-line { display:flex; justify-content:space-between; border-bottom:1px solid #eee; padding:8px 0; font-size:11px; }
+        .cat-head { background: #f8fafc; padding: 5px; font-weight: 800; font-size: 12px; margin-top: 10px; color: var(--s); border-bottom: 2px solid var(--s); }
     </style>
 </head>
 <body>
@@ -51,7 +64,7 @@
     <div class="sum-card">
         <h2 id="sumTitle">Summary</h2>
         <div id="sumBody"></div>
-        <button style="background:#danger; width:100%; margin-top:20px; padding:15px; color:white; border:none; border-radius:8px; font-weight:bold;" onclick="document.getElementById('summaryOverlay').style.display='none'">Close Report</button>
+        <button style="background:var(--danger); width:100%; margin-top:20px; padding:15px; color:white; border:none; border-radius:8px; font-weight:bold;" onclick="document.getElementById('summaryOverlay').style.display='none'">Close Screen</button>
     </div>
 </div>
 
@@ -65,16 +78,19 @@
 <div class="footer-stats">
     <div class="stat-row">
         <div>Sales Val: <span id="daySalesTotal">#0</span></div>
-        <div>Stock Val: <span id="dayStockTotal">#0</span></div>
+        <div>Total Stock Val: <span id="dayStockTotal">#0</span></div>
     </div>
     <div id="lowStockAlert" class="alert-pill" style="display:none;">⚠️ <span id="lowCount">0</span> Items Need Restock</div>
 </div>
 
 <div class="btns">
     <button class="save-btn" onclick="saveDay()">SAVE DATA</button>
-    <button class="wa-btn" onclick="sendWhatsApp()">WHATSAPP STOCK</button>
+    <button class="stock-btn" onclick="showStockBalance()">VIEW STOCK VAL</button>
     <button class="da-btn" onclick="showDaySummary()">DAY SALES</button>
     <button class="sum-btn" onclick="showMonthly()">MONTH REPORT</button>
+    <button class="print-btn" onclick="window.print()">🖨️ PRINT PDF</button>
+    <button class="wa-btn" style="background:var(--wa)" onclick="alert('Use Reorder List for WhatsApp or View Stock Val for internal review.')">INFO</button>
+    <button class="reorder-btn" onclick="sendReorderWhatsApp()">📢 SHARE REORDER LIST (LOW STOCK)</button>
 </div>
 
 <script>
@@ -90,15 +106,10 @@
     };
 
     const schema = {
-        "Crumbles": ["Perlar larva", "0.5mm", "0.7mm", "1.1mm", "1.8mm"],
-        "Superior": ["2mm", "3mm", "4.5mm", "6mm", "8mm"],
-        "Essential": ["3mm", "4.5mm", "6mm", "8mm"],
-        "Repro": ["8mm"],
-        "Additives": ["Aquacare", "Selko PH"],
-        "Broiler Pro": ["Prestarter", "Starter", "Finisher"],
-        "Broiler Ess": ["Starter", "Finisher"],
-        "Concentrate": ["L/Prod.cct5%", "L/rearer cct5%", "B/starter cct5%", "B/Finisher cct5%"],
-        "Mash": ["L/mash", "G/mash"]
+        "Crumbles": ["Perlar larva", "0.5mm", "0.7mm", "1.1mm", "1.8mm"], "Superior": ["2mm", "3mm", "4.5mm", "6mm", "8mm"],
+        "Essential": ["3mm", "4.5mm", "6mm", "8mm"], "Repro": ["8mm"], "Additives": ["Aquacare", "Selko PH"],
+        "Broiler Pro": ["Prestarter", "Starter", "Finisher"], "Broiler Ess": ["Starter", "Finisher"],
+        "Concentrate": ["L/Prod.cct5%", "L/rearer cct5%", "B/starter cct5%", "B/Finisher cct5%"], "Mash": ["L/mash", "G/mash"]
     };
 
     document.getElementById('targetDate').valueAsDate = new Date();
@@ -126,10 +137,7 @@
                 section += `
                     <div class="card ${cl < 20 ? 'low-stock-border' : ''}" id="card-${id}">
                         <div class="prod-header">
-                            <span class="prod-name">
-                                ${item} 
-                                <span id="warn-${id}" class="restock-sign" style="display: ${cl < 20 ? 'inline' : 'none'}">⚠️ RESTOCK</span>
-                            </span>
+                            <span class="prod-name">${item} <span id="warn-${id}" class="restock-sign" style="display: ${cl < 20 ? 'inline' : 'none'}">⚠️ RESTOCK</span></span>
                             <span class="price-tag">#${price.toLocaleString()}</span>
                         </div>
                         <div class="grid">
@@ -150,20 +158,14 @@
         const re = Number(document.getElementById(`rec-${id}`).value);
         const sa = Number(document.getElementById(`sale-${id}`).value);
         const cl = (op + re) - sa;
-        
         const clInput = document.getElementById(`close-${id}`);
         const warnSign = document.getElementById(`warn-${id}`);
         const cardBox = document.getElementById(`card-${id}`);
-
         clInput.value = cl;
         if (cl < 20) {
-            clInput.className = 'stock-red';
-            warnSign.style.display = 'inline';
-            cardBox.classList.add('low-stock-border');
+            clInput.className = 'stock-red'; warnSign.style.display = 'inline'; cardBox.classList.add('low-stock-border');
         } else {
-            clInput.className = 'stock-green';
-            warnSign.style.display = 'none';
-            cardBox.classList.remove('low-stock-border');
+            clInput.className = 'stock-green'; warnSign.style.display = 'none'; cardBox.classList.remove('low-stock-border');
         }
         updateGrandTotals();
     }
@@ -184,31 +186,54 @@
         document.getElementById('dayStockTotal').innerText = "#" + totalC.toLocaleString();
         const alertBox = document.getElementById('lowStockAlert');
         if (lowStockCount > 0) {
-            alertBox.style.display = 'block';
-            document.getElementById('lowCount').innerText = lowStockCount;
+            alertBox.style.display = 'block'; document.getElementById('lowCount').innerText = lowStockCount;
         } else { alertBox.style.display = 'none'; }
     }
 
-    function sendWhatsApp() {
+    function showStockBalance() {
         const date = document.getElementById('targetDate').value;
-        let msg = `*current store balance as at ${date}*%0A%0A`;
-        let grandTotal = 0;
+        let html = '', grandTotal = 0;
         for (const [cat, items] of Object.entries(schema)) {
             let catContent = '';
             items.forEach(item => {
                 const id = `${cat}-${item}`.replace(/\s+/g, '').replace(/\//g, '');
-                const fullKey = `${cat}-${item}`;
-                const price = priceList[fullKey] || 0;
+                const price = priceList[`${cat}-${item}`] || 0;
                 const cl = Number(document.getElementById(`close-${id}`).value);
                 if (cl > 0) {
                     const val = cl * price;
-                    catContent += `• ${item}: *${cl}* (#${val.toLocaleString()})${cl < 20 ? ' [RESTOCK]' : ''}%0A`;
+                    catContent += `<div class="sum-line"><span>${item} (${cl})</span><span>#${val.toLocaleString()}</span></div>`;
                     grandTotal += val;
                 }
             });
-            if (catContent !== '') { msg += `*--- ${cat.toUpperCase()} ---*%0A${catContent}%0A`; }
+            if (catContent !== '') {
+                html += `<div class="cat-head">${cat.toUpperCase()}</div>${catContent}`;
+            }
         }
-        msg += `*TOTAL INVENTORY VALUE: #${grandTotal.toLocaleString()}*`;
+        document.getElementById('sumTitle').innerText = "Store Balance: " + date;
+        document.getElementById('sumBody').innerHTML = html || "<p>All stock is empty.</p>";
+        if(grandTotal > 0) {
+            document.getElementById('sumBody').innerHTML += `<div class="sum-line" style="font-weight:bold; border-top:2px solid #000; margin-top:15px; font-size:14px;"><span>GRAND TOTAL VALUE</span><span>#${grandTotal.toLocaleString()}</span></div>`;
+        }
+        document.getElementById('summaryOverlay').style.display = 'block';
+    }
+
+    function sendReorderWhatsApp() {
+        const date = document.getElementById('targetDate').value;
+        let msg = `*📢 STOCK REORDER LIST (${date})*%0A%0A`;
+        let found = false;
+        for (const [cat, items] of Object.entries(schema)) {
+            let catContent = '';
+            items.forEach(item => {
+                const id = `${cat}-${item}`.replace(/\s+/g, '').replace(/\//g, '');
+                const cl = Number(document.getElementById(`close-${id}`).value);
+                if (cl < 20) {
+                    catContent += `❌ *${item}* (Stock: ${cl})%0A`;
+                    found = true;
+                }
+            });
+            if (catContent !== '') msg += `*[${cat.toUpperCase()}]*%0A${catContent}%0A`;
+        }
+        if (!found) { alert("Stock is healthy!"); return; }
         window.open(`https://wa.me/?text=${msg}`, '_blank');
     }
 
@@ -231,16 +256,15 @@
         for (const [cat, items] of Object.entries(schema)) {
             items.forEach(item => {
                 const id = `${cat}-${item}`.replace(/\s+/g, '').replace(/\//g, '');
-                const price = priceList[`${cat}-${item}`] || 0;
                 const sa = Number(document.getElementById(`sale-${id}`).value);
                 if (sa > 0) {
-                    const val = sa * price;
+                    const val = sa * (priceList[`${cat}-${item}`] || 0);
                     html += `<div class="sum-line"><span>${cat} ${item} (${sa})</span><span>#${val.toLocaleString()}</span></div>`;
                     totalVal += val;
                 }
             });
         }
-        document.getElementById('sumTitle').innerText = "Sales: " + date;
+        document.getElementById('sumTitle').innerText = "Daily Sales: " + date;
         document.getElementById('sumBody').innerHTML = html || "<p>No sales recorded.</p>";
         if(totalVal > 0) document.getElementById('sumBody').innerHTML += `<div class="sum-line" style="font-weight:bold; border-top:2px solid #000; margin-top:10px;"><span>TOTAL CASH</span><span>#${totalVal.toLocaleString()}</span></div>`;
         document.getElementById('summaryOverlay').style.display = 'block';
@@ -248,8 +272,7 @@
 
     function showMonthly() {
         const month = document.getElementById('targetDate').value.substring(0, 7);
-        let html = '', grandVal = 0;
-        const stats = {};
+        let html = '', grandVal = 0; const stats = {};
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key.startsWith(month)) {
@@ -266,8 +289,8 @@
                 grandVal += val;
             }
         }
-        document.getElementById('sumTitle').innerText = "Monthly Sales: " + month;
-        document.getElementById('sumBody').innerHTML = html || "<p>No records.</p>";
+        document.getElementById('sumTitle').innerText = "Monthly Summary: " + month;
+        document.getElementById('sumBody').innerHTML = html || "<p>No records for this month.</p>";
         if(grandVal > 0) document.getElementById('sumBody').innerHTML += `<div class="sum-line" style="font-weight:bold; border-top:2px solid #000; margin-top:10px;"><span>GRAND TOTAL</span><span>#${grandVal.toLocaleString()}</span></div>`;
         document.getElementById('summaryOverlay').style.display = 'block';
     }
