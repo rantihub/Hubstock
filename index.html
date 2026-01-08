@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hubstock v7 - Daily Report</title>
     <style>
-        :root { --p: #0f172a; --s: #3b82f6; --bg: #f1f5f9; --success: #22c55e; }
-        body { font-family: system-ui, -apple-system; background: var(--bg); margin: 0; padding: 10px; color: var(--p); padding-bottom: 140px; }
+        :root { --p: #0f172a; --s: #3b82f6; --bg: #f1f5f9; --success: #22c55e; --wa: #25d366; }
+        body { font-family: system-ui, -apple-system; background: var(--bg); margin: 0; padding: 10px; color: var(--p); padding-bottom: 160px; }
         .header { position: sticky; top: 0; background: var(--bg); padding-bottom: 10px; z-index: 10; border-bottom: 1px solid #ddd; }
         .date-picker { width: 100%; padding: 12px; border-radius: 8px; border: 2px solid var(--s); font-size: 16px; margin-bottom: 10px; box-sizing: border-box; }
         .card { background: white; border-radius: 8px; padding: 10px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -25,12 +25,13 @@
         .stock-yellow { background-color: #fef9c3 !important; }
         .stock-green { background-color: #dcfce7 !important; }
 
-        .footer-stats { position: fixed; bottom: 85px; left: 0; width: 100%; background: #1e293b; color: white; padding: 10px; font-size: 11px; display: flex; justify-content: space-around; z-index: 5; }
-        .btns { position: fixed; bottom: 0; left: 0; width: 100%; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; padding: 10px; background: white; z-index: 10; border-top: 1px solid #ddd; }
-        button { padding: 12px 5px; border-radius: 6px; border: none; font-weight: bold; color: white; cursor: pointer; font-size: 11px; }
+        .footer-stats { position: fixed; bottom: 105px; left: 0; width: 100%; background: #1e293b; color: white; padding: 10px; font-size: 11px; display: flex; justify-content: space-around; z-index: 5; }
+        .btns { position: fixed; bottom: 0; left: 0; width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 10px; background: white; z-index: 10; border-top: 1px solid #ddd; box-sizing: border-box; }
+        button { padding: 12px 5px; border-radius: 6px; border: none; font-weight: bold; color: white; cursor: pointer; font-size: 11px; text-transform: uppercase; }
         .save-btn { background: var(--s); }
         .day-btn { background: var(--success); }
         .sum-btn { background: var(--p); }
+        .wa-btn { background: var(--wa); }
 
         #summaryOverlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:100; padding:15px; box-sizing:border-box; overflow-y:auto; }
         .sum-card { background:white; padding:20px; border-radius:12px; color: #000; }
@@ -60,9 +61,10 @@
 </div>
 
 <div class="btns">
-    <button class="save-btn" onclick="saveDay()">SAVE</button>
-    <button class="day-btn" onclick="showDaySummary()">DAY REPT</button>
-    <button class="sum-btn" onclick="showMonthly()">MONTH REPT</button>
+    <button class="save-btn" onclick="saveDay()">SAVE DATA</button>
+    <button class="wa-btn" onclick="sendWhatsApp()">WHATSAPP STOCK</button>
+    <button class="day-btn" onclick="showDaySummary()">DAY SALES</button>
+    <button class="sum-btn" onclick="showMonthly()">MONTH REPORT</button>
 </div>
 
 <script>
@@ -166,29 +168,34 @@
         document.getElementById('dayStockTotal').innerText = "#" + totalC.toLocaleString();
     }
 
-    function showDaySummary() {
+    function sendWhatsApp() {
         const date = document.getElementById('targetDate').value;
-        let html = '', totalVal = 0;
-        
+        let msg = `*HUBSTOCK BALANCE: ${date}*%0A%0A`;
+        let grandTotal = 0;
+
         for (const [cat, items] of Object.entries(schema)) {
+            let catHeaderAdded = false;
             items.forEach(item => {
                 const id = `${cat}-${item}`.replace(/\s+/g, '');
                 const fullKey = `${cat}-${item}`;
                 const price = priceList[fullKey] || 0;
-                const sa = Number(document.getElementById(`sale-${id}`).value);
+                const cl = Number(document.getElementById(`close-${id}`).value);
                 
-                if (sa > 0) {
-                    const val = sa * price;
-                    html += `<div class="sum-line"><span>${fullKey} (${sa})</span><span>#${val.toLocaleString()}</span></div>`;
-                    totalVal += val;
+                if (cl > 0) {
+                    if (!catHeaderAdded) {
+                        msg += `*--- ${cat.toUpperCase()} ---*%0A`;
+                        catHeaderAdded = true;
+                    }
+                    const val = cl * price;
+                    msg += `• ${item}: *${cl}* (#${val.toLocaleString()})%0A`;
+                    grandTotal += val;
                 }
             });
+            if (catHeaderAdded) msg += `%0A`;
         }
-        
-        document.getElementById('sumTitle').innerText = "Daily Summary: " + date;
-        document.getElementById('sumBody').innerHTML = html || "<p>No sales today.</p>";
-        if(totalVal > 0) document.getElementById('sumBody').innerHTML += `<div class="sum-line" style="font-weight:bold; border-top:2px solid #000; margin-top:10px;"><span>TOTAL CASH</span><span>#${totalVal.toLocaleString()}</span></div>`;
-        document.getElementById('summaryOverlay').style.display = 'block';
+
+        msg += `*TOTAL INVENTORY VALUE: #${grandTotal.toLocaleString()}*`;
+        window.open(`https://wa.me/?text=${msg}`, '_blank');
     }
 
     function saveDay() {
@@ -201,14 +208,34 @@
             });
         }
         localStorage.setItem(date, JSON.stringify(dayData));
-        alert("Data saved!");
+        alert("Data saved successfully!");
+    }
+
+    function showDaySummary() {
+        const date = document.getElementById('targetDate').value;
+        let html = '', totalVal = 0;
+        for (const [cat, items] of Object.entries(schema)) {
+            items.forEach(item => {
+                const id = `${cat}-${item}`.replace(/\s+/g, '');
+                const price = priceList[`${cat}-${item}`] || 0;
+                const sa = Number(document.getElementById(`sale-${id}`).value);
+                if (sa > 0) {
+                    const val = sa * price;
+                    html += `<div class="sum-line"><span>${cat} ${item} (${sa})</span><span>#${val.toLocaleString()}</span></div>`;
+                    totalVal += val;
+                }
+            });
+        }
+        document.getElementById('sumTitle').innerText = "Daily Sales: " + date;
+        document.getElementById('sumBody').innerHTML = html || "<p>No sales recorded today.</p>";
+        if(totalVal > 0) document.getElementById('sumBody').innerHTML += `<div class="sum-line" style="font-weight:bold; border-top:2px solid #000; margin-top:10px;"><span>TOTAL CASH</span><span>#${totalVal.toLocaleString()}</span></div>`;
+        document.getElementById('summaryOverlay').style.display = 'block';
     }
 
     function showMonthly() {
         const month = document.getElementById('targetDate').value.substring(0, 7);
         let html = '', grandVal = 0;
         const stats = {};
-
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key.startsWith(month)) {
@@ -219,7 +246,6 @@
                 }
             }
         }
-
         for(let id in stats) {
             let price = 0, name = id;
             for(let pk in priceList) { if(pk.replace(/\s+/g, '') === id) { price = priceList[pk]; name = pk; } }
@@ -229,9 +255,8 @@
                 grandVal += val;
             }
         }
-
         document.getElementById('sumTitle').innerText = "Monthly Summary: " + month;
-        document.getElementById('sumBody').innerHTML = html || "<p>No sales this month.</p>";
+        document.getElementById('sumBody').innerHTML = html || "<p>No sales records for this month.</p>";
         if(grandVal > 0) document.getElementById('sumBody').innerHTML += `<div class="sum-line" style="font-weight:bold; border-top:2px solid #000; margin-top:10px;"><span>GRAND TOTAL</span><span>#${grandVal.toLocaleString()}</span></div>`;
         document.getElementById('summaryOverlay').style.display = 'block';
     }
